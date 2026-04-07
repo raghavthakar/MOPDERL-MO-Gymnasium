@@ -12,7 +12,7 @@ pip install -r requirements.txt
 All environments' file in ***environments*** folder
 
 ## Run MOPDERL
-<!-- All bash script for running is in **bash** folder. (Ex: MO-Swimmer-v2 environment):
+<!-- All bash script for running is in **bash** folder. (Ex: mo-swimmer-v5 environment):
 **Check bash before running**
 **Correct example see Swimmer environment**
 ```bash
@@ -33,10 +33,10 @@ Other config please seek into *run_mo_pderl.py* file:
 python run_mo_pderl.py -h
 ```
 <!-- ## Run PGMORL (Skip)
-For example, running MO-Swimmer-v2 environment:
+For example, running mo-swimmer-v5 environment:
 ```python
 cd PGMORL
-python scrips/swimmer-v2.py --pgmorl --savedir=../result/PGMORL/MO-Swimmer-v2
+python scrips/swimmer-v2.py --pgmorl --savedir=../result/PGMORL/mo-swimmer-v5
 ``` -->
 
 Results for each run will be at: "*your_save_dir/environment_name/run_***/archive*"

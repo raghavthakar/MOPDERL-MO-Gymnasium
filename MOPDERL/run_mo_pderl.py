@@ -17,8 +17,8 @@ import wandb
 
 parser = argparse.ArgumentParser()
 # Updated environment choices to reflect mo-gymnasium names
-parser.add_argument('-env', help='Environment Choices: (MO-Swimmer-v2) (MO-HalfCheetah-v2) (MO-Hopper-v2) ' +
-                                 '(MO-Walker2d-v2) (MO-Ant-v2)', required=True, type=str)
+parser.add_argument('-env', help='Environment Choices: (mo-swimmer-v5) (mo-halfcheetah-v5) (mo-hopper-2obj-v5) ' +
+                                 '(mo-walker2d-v5) (mo-ant-2obj-v5)', required=True, type=str)
 parser.add_argument('-seed', help='Random seed to be used', type=int, required=True)
 parser.add_argument('-disable_cuda', help='Disables CUDA', action='store_true')
 parser.add_argument('-mut_mag', help='The magnitude of the mutation', type=float, default=0.05)
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     logger.info("Start time: " + datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
 
     # Create Env
-    env = utils.NormalizedActions(gym.make(name_map[parameters.env_name]))
+    env = utils.NormalizedActions(gym.make(parameters.env_name))
     parameters.action_dim = env.action_space.shape[0]
     parameters.state_dim = env.observation_space.shape[0]
 
@@ -106,6 +106,7 @@ if __name__ == "__main__":
 
     time_start = time.time()
     warm_up_saved = False
+    last_saved_total_frames = -1
 
     while np.sum(agent.num_frames < agent.max_frames).astype(int) > 0:
         logger.info("************************************************")
@@ -130,14 +131,30 @@ if __name__ == "__main__":
         logger.info("=>>>>>> Num frames: " + str(agent.num_frames))
         logger.info("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
 
-        if (parameters.save_ckpt_period > 0 and agent.iterations % parameters.save_ckpt_period == 0) or \
-            np.sum(agent.num_frames < agent.max_frames).astype(int) == 0:
-            agent.save_info()
-            logger.info("Save info successfully!\n\n")
+        # ---------------- Checkpointing ----------------
+        # -save_ckpt is interpreted as a *frame period* (based on sum(num_frames)).
+        # This ensures consistent checkpoints irrespective of generation length.
+        total_frames = int(np.sum(agent.num_frames))
+        should_save_periodic = (
+            parameters.save_ckpt_period > 0
+            and (last_saved_total_frames < 0 or (total_frames - last_saved_total_frames) >= parameters.save_ckpt_period)
+        )
+        should_save_end = np.sum(agent.num_frames < agent.max_frames).astype(int) == 0
 
+        if should_save_periodic or should_save_end:
+            # Save into phase-specific latest folders (warm_up_latest or stage2_latest)
+            # and keep checkpoint/latest pointing to whichever phase is currently active.
+            ckpt_folder = agent.get_active_checkpoint_folder() if hasattr(agent, "get_active_checkpoint_folder") else None
+            agent.save_info(checkpoint_folder=ckpt_folder)
+            if hasattr(agent, "update_latest_checkpoint_pointer"):
+                agent.update_latest_checkpoint_pointer()
+            last_saved_total_frames = total_frames
+            logger.info("Saved checkpoint successfully!\n\n")
+
+        # Preserve warm-up-final checkpoint at transition (mo_agent handles this)
         if not warm_up_saved and np.sum(agent.num_frames < parameters.warm_up_frames).astype(int) == 0:
-            agent.save_info()
-            logger.info("Save warmup infor successfully!!!\n\n")   
+            if hasattr(agent, "warmup_final_saved") and agent.warmup_final_saved:
+                logger.info("Warm-up final checkpoint frozen successfully.\n\n")
             warm_up_saved = True
 
         if len(stats_wandb):

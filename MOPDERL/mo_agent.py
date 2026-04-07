@@ -5,6 +5,7 @@ import torch
 from . import ddpg
 from .td3 import TD3
 import os, shutil
+from typing import Optional
 from .pderl_tools import PDERLTool
 from .nsga2_tools import NSGA, nsga2_sort
 from .archive import *
@@ -87,13 +88,87 @@ class MOAgent:
         self.run_folder = run_folder
         if not os.path.exists(self.run_folder):
             os.mkdir(self.run_folder)
-                
-        self.checkpoint_folder = os.path.join(self.run_folder, "checkpoint")
-        if not os.path.exists(self.checkpoint_folder):
-            os.mkdir(self.checkpoint_folder)
+
+        # --- Checkpoint layout ---
+        # We keep the internal structure identical to the original codebase
+        # (info.npy + warm_up/ or multiobjective/ subfolders), but store warm-up
+        # and stage-2 checkpoints in separate top-level directories to avoid
+        # overwriting the warm-up checkpoint at the transition.
+        self.checkpoint_root = os.path.join(self.run_folder, "checkpoint")
+        os.makedirs(self.checkpoint_root, exist_ok=True)
+
+        # New layout (preferred)
+        self.checkpoint_warmup_latest = os.path.join(self.checkpoint_root, "warm_up_latest")
+        self.checkpoint_warmup_final = os.path.join(self.checkpoint_root, "warm_up_final")
+        self.checkpoint_stage2_latest = os.path.join(self.checkpoint_root, "stage2_latest")
+        self.checkpoint_latest_link = os.path.join(self.checkpoint_root, "latest")
+
+        for p in [self.checkpoint_warmup_latest, self.checkpoint_warmup_final, self.checkpoint_stage2_latest]:
+            os.makedirs(p, exist_ok=True)
+
+        # Legacy layout compatibility: older runs may have info.npy directly under
+        # checkpoint/. If so, we keep using that folder for load/save unless the
+        # new layout already exists.
+        legacy_info = os.path.join(self.checkpoint_root, "info.npy")
+        new_layout_has_any = (
+            os.path.exists(os.path.join(self.checkpoint_warmup_latest, "info.npy"))
+            or os.path.exists(os.path.join(self.checkpoint_stage2_latest, "info.npy"))
+            or os.path.exists(os.path.join(self.checkpoint_warmup_final, "info.npy"))
+        )
+        self.using_legacy_checkpoints = bool(os.path.exists(legacy_info) and not new_layout_has_any)
+
+        if self.using_legacy_checkpoints:
+            # Preserve old behavior
+            self.checkpoint_folder = self.checkpoint_root
+        else:
+            # Choose the best existing target for the "latest" pointer.
+            if os.path.exists(os.path.join(self.checkpoint_stage2_latest, "info.npy")):
+                target = self.checkpoint_stage2_latest
+            elif os.path.exists(os.path.join(self.checkpoint_warmup_latest, "info.npy")):
+                target = self.checkpoint_warmup_latest
+            else:
+                target = self.checkpoint_warmup_latest
+
+            self._set_latest_checkpoint_pointer(target)
+            # Default read/write path for resume is always the latest pointer.
+            self.checkpoint_folder = self.checkpoint_latest_link if os.path.exists(self.checkpoint_latest_link) else target
+
+        # Whether we have already frozen the warm-up-final checkpoint
+        self.warmup_final_saved = os.path.exists(os.path.join(self.checkpoint_warmup_final, "info.npy"))
+
         self.archive_folder = os.path.join(self.run_folder, "archive")
         if not os.path.exists(self.archive_folder):
             os.mkdir(self.archive_folder)
+
+    def _set_latest_checkpoint_pointer(self, target_folder: str) -> None:
+        """Create/overwrite the checkpoint/latest symlink to point at target_folder."""
+        # If we're in legacy mode, do nothing.
+        if getattr(self, "using_legacy_checkpoints", False):
+            return
+
+        try:
+            # Remove existing link/file if present
+            if os.path.islink(self.checkpoint_latest_link) or os.path.isfile(self.checkpoint_latest_link):
+                os.remove(self.checkpoint_latest_link)
+            # If it's a directory (not a symlink), we avoid deleting user data.
+            if os.path.isdir(self.checkpoint_latest_link) and not os.path.islink(self.checkpoint_latest_link):
+                return
+            os.symlink(os.path.abspath(target_folder), self.checkpoint_latest_link)
+        except OSError:
+            # Symlinks can fail on some systems; fall back to no-link behavior.
+            pass
+
+    def get_active_checkpoint_folder(self) -> str:
+        """Return the folder that should receive the latest checkpoint for the current phase."""
+        if getattr(self, "using_legacy_checkpoints", False):
+            return self.checkpoint_root
+        return self.checkpoint_warmup_latest if self.warm_up else self.checkpoint_stage2_latest
+
+    def update_latest_checkpoint_pointer(self) -> None:
+        """Update checkpoint/latest to point to the active phase checkpoint."""
+        if getattr(self, "using_legacy_checkpoints", False):
+            return
+        self._set_latest_checkpoint_pointer(self.get_active_checkpoint_folder())
         
 
     def evaluate(self, agent, is_render=False, is_action_noise=False,
@@ -189,6 +264,14 @@ class MOAgent:
 
         if self.warm_up:
             if np.sum((self.num_frames <= self.args.warm_up_frames).astype(np.int32)) == 0:
+                # We are *about to* transition out of warm-up.
+                # Freeze a final warm-up checkpoint (never overwritten) so it can be
+                # used later to restart stage-2 training or to bootstrap other algorithms.
+                if (not getattr(self, "using_legacy_checkpoints", False)) and (not self.warmup_final_saved):
+                    self.save_info(checkpoint_folder=self.checkpoint_warmup_final, warm_up_override=True)
+                    self.save_warm_up_info_file(logger, checkpoint_folder=self.checkpoint_warmup_final)
+                    self.warmup_final_saved = True
+
                 self.warm_up = False
                 self.flatten_list()
                 for i, genetic_agent in enumerate(self.pop):
@@ -197,7 +280,6 @@ class MOAgent:
                         self.fitness[i] += episode_reward
                 self.fitness /= self.args.num_evals
                 logger.info("=>>>>>> Finish warming-up and flattening")
-                self.save_warm_up_info_file(logger)
         # ========================== EVOLUTION  ==========================
         if self.warm_up:
             for rl_agent_id in range(self.num_rl_agents):
@@ -337,9 +419,27 @@ class MOAgent:
                 self.pop_list[rl_id][i].load_info(gene_ag_fol)
 
     
-    def save_info(self):
+    def save_info(self, checkpoint_folder: Optional[str] = None, warm_up_override: Optional[bool] = None):
+        """Save a checkpoint.
+
+        Args:
+            checkpoint_folder: where to write the checkpoint. If None, uses self.checkpoint_folder.
+            warm_up_override: if set, forces saving the warm-up (True) or stage-2 (False)
+                checkpoint structure regardless of self.warm_up.
+        """
         print("Saving info ......")
-        folder_path = self.checkpoint_folder
+        folder_path = checkpoint_folder or self.checkpoint_folder
+        os.makedirs(folder_path, exist_ok=True)
+
+        warm_up_state = self.warm_up if warm_up_override is None else warm_up_override
+
+        # Record phase explicitly so loading does not have to guess based on frame count.
+        try:
+            with open(os.path.join(folder_path, "phase.txt"), "w") as f:
+                f.write("warm_up" if warm_up_state else "stage2")
+        except OSError:
+            pass
+
         info = os.path.join(folder_path, "info.npy")
         with open(info, "wb") as f:
             np.save(f, self.num_frames)
@@ -347,13 +447,13 @@ class MOAgent:
             np.save(f, self.num_games)
             np.save(f, self.trained_frames)
             np.save(f, self.iterations)
-            if self.warm_up:
+            if warm_up_state:
                 np.save(f, np.array(self.fitness_list))
             else:
                 np.save(f, self.fitness)
                 np.save(f, np.array(self.pop_individual_type))
 
-        if self.warm_up:
+        if warm_up_state:
             wa_folder_path = os.path.join(folder_path, "warm_up")
             if not os.path.exists(wa_folder_path):
                 os.mkdir(wa_folder_path)
@@ -365,8 +465,8 @@ class MOAgent:
             self.save_info_mo(mo_folder_path)
         print("Saving checkpoint done!")
     
-    def load_info(self):
-        folder_path = self.checkpoint_folder
+    def load_info(self, checkpoint_folder: Optional[str] = None):
+        folder_path = checkpoint_folder or self.checkpoint_folder
         info = os.path.join(folder_path, "info.npy")
         with open(info, "rb") as f:
             self.num_frames = np.load(f)
@@ -375,12 +475,27 @@ class MOAgent:
             self.num_games = np.load(f)
             self.trained_frames = np.load(f)
             self.iterations = np.load(f)
-            
-            # 1. Logic that guesses state based on frames
-            # If frames > warm_up_frames, it sets self.warm_up = False
-            if np.sum((self.num_frames <= self.args.warm_up_frames).astype(np.int32)) == 0:
-                print(self.num_frames)
+
+            # 1. Prefer explicit phase metadata if present
+            phase_file = os.path.join(folder_path, "phase.txt")
+            phase = None
+            if os.path.exists(phase_file):
+                try:
+                    with open(phase_file, "r") as pf:
+                        phase = pf.read().strip()
+                except OSError:
+                    phase = None
+
+            if phase == "warm_up":
+                self.warm_up = True
+            elif phase == "stage2":
                 self.warm_up = False
+            else:
+                # 2. Backward-compatible heuristic: guess state based on frames
+                # If frames > warm_up_frames, it sets self.warm_up = False
+                if np.sum((self.num_frames <= self.args.warm_up_frames).astype(np.int32)) == 0:
+                    print(self.num_frames)
+                    self.warm_up = False
             
             # 2. Robust Loading Logic
             if self.warm_up:
@@ -416,9 +531,11 @@ class MOAgent:
             mo_folder_path = os.path.join(folder_path, "multiobjective")
             self.load_info_mo(mo_folder_path)
 
-    def save_warm_up_info_file(self, logger):
-        info = os.path.join(self.checkpoint_folder, "info.npy")
-        wu_info = os.path.join(self.checkpoint_folder, "wu_info.npy")
+    def save_warm_up_info_file(self, logger, checkpoint_folder: Optional[str] = None):
+        folder_path = checkpoint_folder or self.checkpoint_folder
+        info = os.path.join(folder_path, "info.npy")
+        wu_info = os.path.join(folder_path, "wu_info.npy")
         shutil.copy(info, wu_info)
         logger.info("=>>>>>> Saving warmup info successfully!")
+
 

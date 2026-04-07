@@ -9,10 +9,9 @@
             "name": "Python Debugger: Current File with Arguments",
             "type": "debugpy",
             "request": "launch",
-            "program": "run_mo_pderl.py ",
+            "module": "MOPDERL.run_mo_pderl",
             "console": "integratedTerminal",
-            "args": "-env=MO-Swimmer-v2 -seed=2024 -logdir=/home/raghav/Research/mopderl-env/bruh -save_ckpt=1 -boundary_only -disable_wandb -warm_up=3000 -max_frames=40000",
-            "cwd": "/home/raghav/Research/mopderl-env/mopderl/MOPDERL"
+            "args": "-boundary_only -warm_up=2250000 -max_frames=4000000 -disable_wandb -env=MO-Walker2d-v2 -logdir=/home/raghav/Research/mopderl-env/bruh/strictly_seeded/secondary_critic_runs -seed=2024 -checkpoint_id=0 -run_id=0 -save_ckpt=10 -secondary_critics",
         }
     ]
 }

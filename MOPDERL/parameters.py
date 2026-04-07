@@ -23,13 +23,13 @@ class Parameters:
         if self.env_name == "MO-Hopper-v3":
             self.num_objectives = 3
         # Number of generations to Run
-        if param.env == 'MO-Hopper-v2' or param.env == 'MO-Hopper-v3':
+        if param.env == 'mo-hopper-2obj-v5' or param.env == 'MO-Hopper-v3':
             self.warm_up_frames = 4500000
             self.max_frames = 8000000
-        elif param.env == 'MO-Ant-v2' or param.env == 'MO-HalfCheetah-v2':
+        elif param.env == 'mo-ant-2obj-v5' or param.env == 'mo-halfcheetah-v5':
             self.warm_up_frames = 4000000
             self.max_frames = 8000000
-        elif param.env == 'MO-Walker2d-v2':
+        elif param.env == 'mo-walker2d-v5':
             self.warm_up_frames = 5000000
             self.max_frames = 10000000
         else:
@@ -42,7 +42,7 @@ class Parameters:
 
 
         # Synchronization
-        if param.env == 'MO-Hopper-v2' or param.env == 'MO-Ant-v2' or param.env == 'MO-Walker2d-v2':
+        if param.env == 'mo-hopper-2obj-v5' or param.env == 'mo-ant-2obj-v5' or param.env == 'mo-walker2d-v5':
             self.rl_to_ea_synch_period = 1
         else:
             self.rl_to_ea_synch_period = 10
@@ -75,15 +75,15 @@ class Parameters:
         # ========================================== NeuroEvolution Params =============================================
 
         # Num of trials
-        if param.env == 'MO-Hopper-v2' or param.env == 'MO-Reacher-v2':
+        if param.env == 'mo-hopper-2obj-v5' or param.env == 'MO-Reacher-v2':
             self.num_evals = 3
-        elif param.env == 'MO-Walker2d-v2':
+        elif param.env == 'mo-walker2d-v5':
             self.num_evals = 5
         else:
             self.num_evals = 1
 
         # Elitism Rate
-        if param.env == 'MO-Reacher-v2' or param.env == 'MO-Walker2d-v2' or param.env == 'MO-Ant-v2' or param.env == 'MO-Hopper-v2':
+        if param.env == 'MO-Reacher-v2' or param.env == 'mo-walker2d-v5' or param.env == 'mo-ant-2obj-v5' or param.env == 'mo-hopper-2obj-v5':
             self.elite_fraction = 0.2
         else:
             self.elite_fraction = 0.1

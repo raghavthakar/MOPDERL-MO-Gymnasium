@@ -1,9 +1,9 @@
 {   
-    "MO-HalfCheetah-v2": ["reward_run", "reward_energy"],
-    "MO-Hopper-v2": ["reward_run", "reward_jump"],
-    "MO-Swimmer-v2": ["reward_fwd", "reward_ctrl"],
-    "MO-Walker2d-v2": ["reward_speed", "reward_energy"], 
+    "mo-halfcheetah-v5": ["reward_run", "reward_energy"],
+    "mo-hopper-2obj-v5": ["reward_run", "reward_jump"],
+    "mo-swimmer-v5": ["reward_fwd", "reward_ctrl"],
+    "mo-walker2d-v": ["reward_speed", "reward_energy"], 
     "MO-Humanoid-v2": ["reward_run", "reward_energy"],
-    "MO-Ant-v2": ["X-Axis Speed", "Y-Axis Speed"],
+    "mo-ant-2obj-v5": ["X-Axis Speed", "Y-Axis Speed"],
     "MO-Hopper-v3": ["reward_run", "reward_jump", "reward_energy"]
 }

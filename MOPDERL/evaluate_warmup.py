@@ -47,7 +47,7 @@ def evaluate_agent(agent, env, parameters, num_evals=10):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate agent populations from a warm-up checkpoint.")
     # --- Primary Arguments for this script ---
-    parser.add_argument('-env', help='Environment name (e.g., MO-Swimmer-v2)', required=True, type=str)
+    parser.add_argument('-env', help='Environment name (e.g., mo-swimmer-v5)', required=True, type=str)
     parser.add_argument('-logdir', help='Base folder where experiment results are saved', type=str, required=True)
     parser.add_argument('-run_id', help="The specific run ID to evaluate (e.g., 0 for 'run_0')", type=int, required=True)
     parser.add_argument('-seed', help='Random seed', type=int, default=2024)
@@ -73,11 +73,11 @@ if __name__ == "__main__":
 
     # Map old env names to new mo-gymnasium names
     name_map = {
-        'MO-Swimmer-v2': 'mo-swimmer-v5',
-        'MO-HalfCheetah-v2': 'mo-halfcheetah-v5',
-        'MO-Hopper-v2': 'mo-hopper-v5',
-        'MO-Walker2d-v2': 'mo-walker2d-v5',
-        'MO-Ant-v2': 'mo-ant-v5',
+        'mo-swimmer-v5': 'mo-swimmer-v5',
+        'mo-halfcheetah-v5': 'mo-halfcheetah-v5',
+        'mo-hopper-2obj-v5': 'mo-hopper-v5',
+        'mo-walker2d-v5': 'mo-walker2d-v5',
+        'mo-ant-2obj-v5': 'mo-ant-v5',
     }
 
     # --- 1. Setup Environment ---
@@ -96,7 +96,15 @@ if __name__ == "__main__":
 
     # --- 2. Locate Checkpoint Folder ---
     run_folder = Path(parameters.save_foldername) / parameters.env_name / f"run_{parameters.run_id}"
-    warmup_checkpoint_folder = run_folder / "checkpoint" / "warm_up"
+    # Prefer the frozen warm-up-final checkpoint if it exists.
+    # Fall back to warm_up_latest, and finally to the legacy layout.
+    ckpt_root = run_folder / "checkpoint"
+    if (ckpt_root / "warm_up_final" / "warm_up").exists():
+        warmup_checkpoint_folder = ckpt_root / "warm_up_final" / "warm_up"
+    elif (ckpt_root / "warm_up_latest" / "warm_up").exists():
+        warmup_checkpoint_folder = ckpt_root / "warm_up_latest" / "warm_up"
+    else:
+        warmup_checkpoint_folder = ckpt_root / "warm_up"
 
     if not warmup_checkpoint_folder.exists():
         print(f"Error: Could not find warm-up checkpoint folder at: {warmup_checkpoint_folder}")
