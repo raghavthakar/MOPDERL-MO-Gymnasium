@@ -29,7 +29,7 @@ def evaluate_agent(agent, env, parameters, num_evals=10):
     """
     # CORRECTED: Get the number of objectives from the parameters object.
     total_reward = np.zeros(parameters.num_objectives, dtype=np.float32)
-    seed = 2024
+    seed = int(parameters.seed)
     for x in range(num_evals):
         state, _ = env.reset(seed=seed+x)
         done = False

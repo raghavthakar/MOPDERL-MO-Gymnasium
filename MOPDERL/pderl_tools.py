@@ -1,8 +1,8 @@
 from .parameters import Parameters
-from . import ddpg 
+from . import ddpg
 from typing import List
 import torch.distributions as dist
-import fastrand, random
+import random
 import numpy as np
 import torch
 
@@ -120,7 +120,7 @@ class PDERLTool:
 
         offsprings_indices = list(set(offsprings_indices))  # Find unique offsprings
         if len(offsprings_indices) % 2 != 0:  # Number of offsprings should be even
-            offsprings_indices.append(offsprings_indices[fastrand.pcg32bounded(len(offsprings_indices))])
+            offsprings_indices.append(offsprings_indices[np.random.randint(len(offsprings_indices))])
         return offsprings_indices
     
     def pderl_step(self, pop, rl_agent_id, fitness, logger):

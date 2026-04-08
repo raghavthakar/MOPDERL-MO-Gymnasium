@@ -1,19 +1,24 @@
-import os, sys
+import os
 from pathlib import Path
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(ROOT_DIR, ".."))
+
+# Seed env vars as early as possible (before importing torch) for determinism.
+from .seed import seed_everything
 
 from datetime import datetime
-import numpy as np, os, time, random
-import mo_gymnasium as gym
-import mo_gymnasium.envs.mujoco #  Importing this module registers the environments
-import torch
+import numpy as np
+import time
 import argparse
-from .parameters import Parameters
 import logging
+
+import mo_gymnasium as gym
+import mo_gymnasium.envs.mujoco  # Importing this module registers the environments
+import torch
+import wandb
+
+from .seed import seed_torch, seed_env
+from .parameters import Parameters
 from . import mo_agent
 from . import utils
-import wandb
 
 parser = argparse.ArgumentParser()
 # Updated environment choices to reflect mo-gymnasium names
@@ -35,7 +40,9 @@ parser.add_argument('-checkpoint_id', help='Select -run- to load checkpoint', ty
 parser.add_argument('-run_id', help="Specify run id, if not given, get id as len(run)", type=int)
 parser.add_argument('-save_ckpt', help="Save checkpoint every _ step, 0 for no save", type=int, default=1)
 parser.add_argument('-disable_wandb', action="store_true", default=False)
-parser.add_argument('-boundary_only', action='store_true', default=False)
+# boundary_only is enforced by the codebase (one-hot weights only). Kept for
+# backward compatibility with older scripts.
+parser.add_argument('-boundary_only', action='store_true', default=True)
 parser.add_argument('-weight_conditioned', action='store_true', default=False)
 parser.add_argument('-secondary_critics', action='store_true', default=False)
 
@@ -49,7 +56,12 @@ name_map = {
 }
 
 if __name__ == "__main__":
-    parameters = Parameters(parser)  # Inject the cla arguments in the parameters object
+    # Parse args and construct the parameters object first.
+    parameters = Parameters(parser)
+
+    # Deterministic seeding (must happen before any model/env stochasticity).
+    seed_everything(parameters.seed)
+    seed_torch(parameters.seed)
 
     if not os.path.exists(parameters.save_foldername):
         os.mkdir(parameters.save_foldername)
@@ -85,20 +97,16 @@ if __name__ == "__main__":
 
     # Create Env
     env = utils.NormalizedActions(gym.make(parameters.env_name))
+    seed_env(env, parameters.seed)
     parameters.action_dim = env.action_space.shape[0]
     parameters.state_dim = env.observation_space.shape[0]
 
     # Write the parameters to a the info file and print them
     parameters.write_params(path=run_folder)
 
-    # Seed
-    torch.manual_seed(parameters.seed)
-    np.random.seed(parameters.seed)
-    random.seed(parameters.seed)
-    env.reset(seed=parameters.seed)
-
     # Create Agent
-    reward_keys = utils.parse_json("MOPDERL/reward_keys.json")[parameters.env_name]
+    reward_keys_path = Path(__file__).resolve().parent / "reward_keys.json"
+    reward_keys = utils.parse_json(str(reward_keys_path))[parameters.env_name]
     agent = mo_agent.MOAgent(parameters, env, reward_keys, run_folder)
     print('Running', parameters.env_name, ' State_dim:', parameters.state_dim, ' Action_dim:', parameters.action_dim)
     logger.info('Running' + str(parameters.env_name) + ' State_dim:' + str(parameters.state_dim) + ' Action_dim:' + str(parameters.action_dim))

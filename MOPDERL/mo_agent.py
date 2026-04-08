@@ -10,6 +10,7 @@ from .pderl_tools import PDERLTool
 from .nsga2_tools import NSGA, nsga2_sort
 from .archive import *
 from .utils import create_scalar_list
+from .seed import seed_everything, seed_torch
 
 class MOAgent:
     def __init__(self, args: Parameters, env, reward_keys: list, run_folder) -> None:
@@ -35,7 +36,9 @@ class MOAgent:
         #         raise NotImplementedError("Unknown rl agent type, must be ddpg or td3, got " + args.rl_type)
         
         self.each_pop_size = int(args.pop_size/args.num_rl_agents)
-        scalar_weight_list = create_scalar_list(self.num_objectives, self.args.boundary_only) #NOTE: obj_num can be recovered via argmax on the one-hot vector
+
+        # Force boundary-only scalarizations (one-hot weights only).
+        scalar_weight_list = create_scalar_list(self.num_objectives, boundary_only=True)
         self.pop_individual_type = []
         for i in range(len(scalar_weight_list)):
             for _ in range(self.each_pop_size):
@@ -50,10 +53,11 @@ class MOAgent:
             else:
                 raise NotImplementedError("Unknown rl agent type, must be ddpg or td3, got " + args.rl_type)
         
-        # reseed to ensure identical population inits across runs
-        torch.manual_seed(args.seed + 100) 
-        np.random.seed(args.seed + 100)
-        random.seed(args.seed + 100)
+        # Reseed deterministically to ensure identical population inits across runs.
+        # We keep this offset to preserve the original intent (different RNG stream
+        # than the main training loop), but do it centrally.
+        seed_everything(args.seed + 100)
+        seed_torch(args.seed + 100)
 
         self.max_frames = args.max_frames
         self.num_frames = np.zeros(args.num_rl_agents)
@@ -537,5 +541,6 @@ class MOAgent:
         wu_info = os.path.join(folder_path, "wu_info.npy")
         shutil.copy(info, wu_info)
         logger.info("=>>>>>> Saving warmup info successfully!")
+
 
 

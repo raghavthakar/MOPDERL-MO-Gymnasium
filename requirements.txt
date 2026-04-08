@@ -1,6 +1,5 @@
 cffi
 Cython
-fastrand
 glfw
 mo-gymnasium[mujoco]
 numpy

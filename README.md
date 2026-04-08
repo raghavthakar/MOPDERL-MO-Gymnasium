@@ -20,17 +20,26 @@ bash ./bash/swimmerv2.py
 ```
 Digging into the bash file: -->
 ```bash
-cd MOPDERL/    # <-- cd to MOPDERL directory
-python run_mo_pderl.py -env=MO-...-logdir=your/dir -disable_wandb -seed=123 -boundary_only -save_ckpt=0   # <-- Run
+# Run from the repository root so imports resolve correctly.
+# Boundary-only mode (one-hot weights only) is enforced by the codebase.
 
-#python run_mo_pderl.py -env=MO-... -logdir=your/dir -disable_wandb -seed=987263145 -boundary_only -save_ckpt=0 -checkpoint # <-- Continue running latest run after disconnected
+python -m mopderl.MOPDERL.run_mo_pderl \
+  -env=mo-swimmer-v5 \
+  -logdir=your/dir \
+  -disable_wandb \
+  -seed=123 \
+  -save_ckpt=0
 
-#python run_mo_pderl.py -env=MO-... -logdir=your/dir -disable_wandb -seed=987263145 -boundary_only -save_ckpt=0  -checkpoint -checkpoint_id=10 # <-- Continue running specific run after disconnected
+# Continue running latest run after disconnected
+# python -m mopderl.MOPDERL.run_mo_pderl -env=mo-swimmer-v5 -logdir=your/dir -disable_wandb -seed=123 -save_ckpt=0 -checkpoint
+
+# Continue running specific run after disconnected
+# python -m mopderl.MOPDERL.run_mo_pderl -env=mo-swimmer-v5 -logdir=your/dir -disable_wandb -seed=123 -save_ckpt=0 -checkpoint -checkpoint_id=10
 ```
 
 Other config please seek into *run_mo_pderl.py* file:  
 ```python
-python run_mo_pderl.py -h
+python -m mopderl.MOPDERL.run_mo_pderl -h
 ```
 <!-- ## Run PGMORL (Skip)
 For example, running mo-swimmer-v5 environment:

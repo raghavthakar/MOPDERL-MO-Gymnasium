@@ -50,11 +50,10 @@ class Parameters:
         # Overwrite sync from command line if value is passed
         # if param.sync_period is not None:
         #     self.rl_to_ea_synch_period = param.sync_period
-        self.boundary_only = param.boundary_only
-        if param.boundary_only:
-            self.num_rl_agents = self.num_objectives
-        else:
-            self.num_rl_agents = 2 ** (self.num_objectives) - 1
+        # This repository runs in *boundary-only* mode.
+        # Non-one-hot scalarizations are explicitly disabled.
+        self.boundary_only = True
+        self.num_rl_agents = self.num_objectives
         self.rl_type = param.rl_type
 
 

@@ -127,6 +127,13 @@ def compare_delta(fitness1, fitness2):
 
 
 def create_scalar_list(n_objs, boundary_only=False):
-    return np.eye(n_objs)
+    """Create the list of scalarization weights.
+
+    This project is configured to run in *boundary-only* mode:
+    only one-hot weights are allowed.
+    """
     if not boundary_only:
-        raise ValueError("Non-boundary is unsupported.")
+        raise ValueError(
+            "Non-boundary weights are disabled: boundary_only must be True (one-hot weights only)."
+        )
+    return np.eye(n_objs, dtype=np.float32)
